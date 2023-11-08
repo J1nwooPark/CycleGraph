@@ -1,14 +1,16 @@
-import networkx as nx 
-import matplotlib.pyplot as plt 
+import networkx as nx
+import matplotlib.pyplot as plt
+from pygraphviz import *
+
 class CycleGraph:
     def __init__(self, w, e):
         assert len(w) >= 3
         assert len(w) == len(e)
 
         self.vertex_num = len(w) - 1
-        self.weight = w # index starts from 1.
-        self.edge = e # edge[i] means the length of v_i to v_((i + 1) % vertex_num).
-        self.__edgeSum = e # edgeSum[i] = countertclockwise length of v_1 to v_((i + 1) % vertex_num).
+        self.weight = w.copy() # index starts from 1.
+        self.edge = e.copy() # edge[i] means the length of v_i to v_((i + 1) % vertex_num).
+        self.__edgeSum = e.copy() # edgeSum[i] = countertclockwise length of v_1 to v_((i + 1) % vertex_num).
         for i in range (2, self.vertex_num + 1):
             self.__edgeSum[i] = self.__edgeSum[i] + self.__edgeSum[i - 1]
         self.__perimeter = self.__edgeSum[-1]
@@ -24,43 +26,51 @@ class CycleGraph:
         self.__getCenter()
         print("Center is between v%d and v%d, %.2f away from v%d." \
               %(self.__center_left, self.__center_right, self.__center_loc, self.__center_left))
-    
-    def showCenter(self):
-        self.__getCenter()
-        G = nx.Graph()
-        G.add_nodes_from(range(1, self.vertex_num + 1))
-        for i in range(1, self.vertex_num):
-            G.add_edge(i, i + 1, minlen=self.edge[i])
-            G.nodes[i]["weight"] = self.weight[i]
-        G.add_edge(self.vertex_num, 1, minlen=self.edge[self.vertex_num])
-        G.nodes[self.vertex_num]["weight"] = self.weight[self.vertex_num]
-        nx.draw(G, pos=nx.drawing.nx_agraph.graphviz_layout(G, prog='dot'))
-        plt.show()
-        
-        
 
-    def __length(self, loc1, loc2): # length between loc1 and loc2 (loc: counterclockwise location measured from v1.) 
+    def showCenter(self):
+        if self.__center_left == -1:
+            self.__getCenter()
+        G = AGraph()
+        G.add_nodes_from(range(1, self.vertex_num + 1))
+        edge_length = {}
+        for i in range(1, self.vertex_num):
+            G.add_edge(i, i + 1, len = self.edge[i])
+        G.add_edge(self.vertex_num, 1, len = self.edge[self.vertex_num])
+
+        G = nx.nx_agraph.from_agraph(G)
+        pos = nx.nx_agraph.graphviz_layout(G)
+
+        loc1 = pos[str(self.__center_left)]; loc2 = pos[str(self.__center_right)]
+        m = self.__center_loc; n = self.edge[self.__center_left] - self.__center_loc
+        x = (m * loc2[0] + n * loc1[0]) / (m + n); y = (m * loc2[1] + n * loc1[1]) / (m + n)
+        G.add_node('C')
+        pos['C'] = (x, y)
+
+        nx.draw(G, pos, with_labels=True)
+        plt.show()
+
+    def __length(self, loc1, loc2): # length between loc1 and loc2 (loc: counterclockwise location measured from v1.)
         if loc1 > loc2:
             loc1, loc2 = loc2, loc1
         return min(loc2 - loc1, self.__perimeter - loc2 + loc1)
-    
+
     def __lengthV(self, v_i, v_j): # length between vertex v_i and v_j.
         return self.__length(self.__edgeSum[v_i - 1], self.__edgeSum[v_j - 1])
-    
+
     def __isDominated(self, v1, v2, v3):
         I1 = self.__dominatingInterval(v2, v1)
         I2 = self.__dominatingInterval(v2, v3)
         intersection = self.__intervalIntersection(I1, I2)
         return intersection[0] < 0
-    
+
     def __relabelVertices(self):
         max_len = 0
         for i in range(2, self.vertex_num + 1):
-            length_to_vi = self.weight[i] * self.__lengthV(1, i); 
+            length_to_vi = self.weight[i] * self.__lengthV(1, i);
             if max_len < length_to_vi:
                 self.__i_star = i
                 max_len = length_to_vi
-    
+
     def __getActiveVertices(self):
         L_a = [self.__i_star]
         if self.__i_star == self.vertex_num:
@@ -70,7 +80,7 @@ class CycleGraph:
 
         for idx in range(3, self.vertex_num + 1):
             i = self.__i_star + idx - 1
-            if i > self.vertex_num: 
+            if i > self.vertex_num:
                 i %= self.vertex_num
             if self.__isDominated(L_a[-1], i, self.__i_star):
                 continue
@@ -82,7 +92,7 @@ class CycleGraph:
                     break
             L_a.append(i)
         self.__active_vertex = L_a
-    
+
     def __dominatingInterval(self, v1, v2):
         loc1 = self.__edgeSum[v1 - 1]; loc2 = self.__edgeSum[v2 - 1]
         w1 = self.weight[v1]; w2 = self.weight[v2]
@@ -106,8 +116,8 @@ class CycleGraph:
             I1, I2 = I2, I1
         l1 = I1[0]; r1 = I1[1]
         l2 = I2[0]; r2 = I2[1]
-        if r1 > self.__perimeter and r2 > self.__perimeter: 
-            return max(l1, l2), min(r1, r2) - self.__perimeter 
+        if r1 > self.__perimeter and r2 > self.__perimeter:
+            return max(l1, l2), min(r1, r2) - self.__perimeter
         elif r1 > self.__perimeter:
             if l1 < r2:
                  return l1, r2
